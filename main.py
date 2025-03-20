@@ -8,8 +8,6 @@ from moviepy.editor import VideoFileClip
 import json  # ✅ To parse timestamps from AI
 from faster_whisper import WhisperModel
 import json
-import re
-import time
 
 # Load environment variables
 load_dotenv()
@@ -20,7 +18,6 @@ def ollama_chat(messages):
     return response["message"]["content"]
 
 # ✅ Function to transcribe video using Whisper
-from faster_whisper import WhisperModel
 
 def transcribe_audio(video_path):
     
