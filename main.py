@@ -1,26 +1,21 @@
+import google.generativeai as genai
 import asyncio
 import os
-import ollama  # ✅ Import Ollama for LLM & Whisper
-import yt_dlp  # ✅ Use yt-dlp instead of pytube
-from autogen_agentchat.agents import AssistantAgent
+import yt_dlp
 from dotenv import load_dotenv
 from moviepy.editor import VideoFileClip
-import json  # ✅ To parse timestamps from AI
-from faster_whisper import WhisperModel
 import json
+from faster_whisper import WhisperModel
+import re
 
 # Load environment variables
 load_dotenv()
 
-# ✅ Function to interact with Ollama LLM
-def ollama_chat(messages):
-    response = ollama.chat(model="llama3", messages=messages, format="json")
-    return response["message"]["content"]
+# ✅ Configure Gemini API key using the environment variable
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ✅ Function to transcribe video using Whisper
-
 def transcribe_audio(video_path):
-    
     print(f"📝 Transcribing {video_path} using Faster Whisper (CPU)...")
 
     model = WhisperModel("small", device="cpu", compute_type="int8")  # Optimized for CPU
@@ -46,7 +41,6 @@ def transcribe_audio(video_path):
     print(f"📄 Transcript saved to {transcript_file}")
     return transcript_data  # Returns list of timestamps + text
 
-
 # ✅ Function to download video from YouTube
 def download_video(url):
     try:
@@ -65,72 +59,80 @@ def download_video(url):
         print(f"❌ Error downloading video: {e}")
         return None
 
-# ✅ Function to find best moments (timestamps) using LLM
+# ✅ Function to find best moments (timestamps) using Gemini LLM
 def find_best_moments(transcript_data):
     """
     Extracts viral moments from a video transcript.
 
     Parameters:
     - transcript_data (list): The video transcript as a structured JSON list.
-    - max_retries (int): Number of retry attempts if AI response is invalid.
-
+    
     Returns:
     - list: Extracted moments with start/end times, captions, and hashtags.
     """
 
+    # Convert transcript data to formatted JSON for AI prompt
     formatted_transcript = json.dumps(transcript_data, indent=2)
 
     prompt = f"""
-        You will receive a JSON transcript of a video.
+    You will receive a JSON transcript of a video.
 
-        ### Task:
-        Extract up to 5 **viral moments** that are either **funny, shocking, or informative**.  
-        Each selected moment **must be between 30 to 60 seconds long** and should be a meaningful combination of transcript entries.
+    ### Task:
+    Extract up to 5 **viral moments** that are either **funny, shocking, or informative**.  
+    Each selected moment **must be between 30 to 60 seconds long** and should be a meaningful combination of transcript entries.
 
-        ### Strict Rules:
-        - ✅ **Use only the provided timestamps** (Do NOT invent new timestamps).  
-        - ✅ **Each extracted moment must consist of multiple transcript entries** to form a coherent 30-60 second segment.
-        - ✅ **Ensure logical continuity**—the moment must make sense when viewed as a clip.
-        - ✅ **Include the transcript excerpt** from the selected segment for reference.
-        - ✅ **Return only valid JSON**, formatted like this:
+    ### Strict Rules:
+    - ✅ **Use only the provided timestamps** (Do NOT invent new timestamps).  
+    - ✅ **Each extracted moment must consist of multiple transcript entries** to form a coherent 30-60 second segment.
+    - ✅ **Ensure logical continuity**—the moment must make sense when viewed as a clip.
+    - ✅ **Include the transcript excerpt** from the selected segment for reference.
+    - ✅ **Return only valid JSON**, formatted like this:
 
-        ```json
-        [
-            {{
-                "start": 0.00,
-                "end": 30.00,
-                "transcript": "I'm gonna give my honest humble opinion... Another celebrity has just been accused of serious acts of violence.",
-                "caption": "This celebrity just exposed the truth! 👀",
-                "hashtags": ["#celebrity", "#drama", "#mustwatch"]
-            }},
-            {{
-                "start": 45.00,
-                "end": 75.00,
-                "transcript": "Now, I'm not gonna pretend nothing's happened overnight... I'm gonna be open and honest as I always am.",
-                "caption": "Wait… did they just say that?! 😱",
-                "hashtags": ["#shocking", "#trending", "#viralclip"]
-            }}
-        ]
-        ```
+    ```json
+    [
+        {{
+            "start": 0.00,
+            "end": 30.00,
+            "transcript": "I'm gonna give my honest humble opinion... Another celebrity has just been accused of serious acts of violence.",
+            "caption": "This celebrity just exposed the truth! 👀",
+            "hashtags": ["#celebrity", "#drama", "#mustwatch"]
+        }} 
+    ]
+    ```
 
-        ### Transcript JSON:  
-        ```json
-        {formatted_transcript}
-        ```
+    ### Transcript JSON:  
+    ```json
+    {formatted_transcript}
+    ```
     """
 
-   
-    response = ollama_chat([{"role": "user", "content": prompt}]).strip()
-    print(response)
+    # Generate AI response
+    response = genai.GenerativeModel("gemini-1.5-pro").generate_content(prompt)
+    raw_text = response.text.strip()
+
+    # Clean AI response in case it wraps the output in a code block
+    cleaned_text = re.sub(r"```json\n(.*?)\n```", r"\1", raw_text, flags=re.DOTALL).strip()
+
     try:
-        json_data = json.loads(response)
-        if isinstance(json_data, list) and all(isinstance(item, dict) and "start" in item and "end" in item for item in json_data):
-            print(f"✅ Best moments identified: {json_data}")
+        # Attempt to parse the cleaned JSON response
+        json_data = json.loads(cleaned_text)
+
+        # Validate if the response is a list of dictionaries with required keys
+        if isinstance(json_data, list) and all(
+            isinstance(item, dict) and 
+            "start" in item and "end" in item and 
+            "transcript" in item and "caption" in item and "hashtags" in item
+            for item in json_data
+        ):
+            print(f"✅ Successfully extracted viral moments: {json_data}")
             return json_data
         else:
-            print(f"❌ AI response missing timestamps.")
+            print(f"❌ AI response does not contain the expected structure.")
+            return []
+    
     except json.JSONDecodeError as e:
-        print(f"🔍 Raw AI Response: {response}")
+        print(f"❌ JSON Decode Error: {e}")
+        print(f"🔍 Raw AI Response:\n{cleaned_text}")
         return []
 
 
@@ -144,7 +146,7 @@ def trim_video(video_path, moments):
         end_time = float(moment["end"])
 
         output_file = f"short_clip_{i+1}.mp4"
-        print(f"✂️ Cutting {output_file}: {moment['reason']} ({moment['start']} - {moment['end']})")
+        print(f"✂️ Cutting {output_file}: {moment['caption']} ({moment['start']} - {moment['end']})")
         
         clip = video.subclip(start_time, end_time)
         clip.write_videofile(output_file, codec="libx264", audio_codec="aac")
@@ -154,7 +156,7 @@ def trim_video(video_path, moments):
     return clips
 
 async def main():
-    video_url = "https://www.youtube.com/watch?v=ydRy-noAv1Y"  # Example URL
+    video_url = "https://www.youtube.com/watch?v=R_ICzXotoQY"  # Example URL
 
     print("🔄 Processing YouTube video...")
     video_path = download_video(video_url)
@@ -166,7 +168,7 @@ async def main():
     # ✅ Step 1: Transcribe the Video
     transcript = transcribe_audio(video_path)
 
-    # ✅ Step 2: Ask AI for best timestamps
+    # ✅ Step 2: Ask Gemini for best timestamps
     best_moments = find_best_moments(transcript)
 
     if not best_moments:
