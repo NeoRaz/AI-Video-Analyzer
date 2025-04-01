@@ -3,13 +3,16 @@ import asyncio
 import os
 import yt_dlp
 from dotenv import load_dotenv
-from moviepy.editor import VideoFileClip
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import json
 from faster_whisper import WhisperModel
 import re
+import moviepy.config as mpc
 
 # Load environment variables
 load_dotenv()
+
+mpc.change_settings({"IMAGEMAGICK_BINARY": "/usr/bin/convert"})  # Update with correct path
 
 # ✅ Configure Gemini API key using the environment variable
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -60,6 +63,26 @@ def download_video(url):
         return None
 
 # ✅ Function to find best moments (timestamps) using Gemini LLM
+def fix_json_formatting(raw_text):
+    """
+    Attempt to fix common issues with malformed JSON responses, such as missing brackets or extra characters.
+    
+    Parameters:
+    - raw_text (str): Raw AI response text.
+    
+    Returns:
+    - str: Fixed JSON string.
+    """
+    # Remove any potential code block wrapping
+    cleaned_text = re.sub(r"```json\n(.*?)\n```", r"\1", raw_text, flags=re.DOTALL).strip()
+    
+    # Attempt to fix any missing or extra characters that break the JSON format
+    # For example, ensure there is a valid list at the top level
+    if not cleaned_text.startswith('['):
+        cleaned_text = f"[{cleaned_text}]"
+    
+    return cleaned_text
+
 def find_best_moments(transcript_data):
     """
     Extracts viral moments from a video transcript.
@@ -70,7 +93,7 @@ def find_best_moments(transcript_data):
     Returns:
     - list: Extracted moments with start/end times, captions, and hashtags.
     """
-
+    
     # Convert transcript data to formatted JSON for AI prompt
     formatted_transcript = json.dumps(transcript_data, indent=2)
 
@@ -95,7 +118,6 @@ def find_best_moments(transcript_data):
             "end": 30.00,
             "transcript": "I'm gonna give my honest humble opinion... Another celebrity has just been accused of serious acts of violence.",
             "caption": "This celebrity just exposed the truth! 👀",
-            "hashtags": ["#celebrity", "#drama", "#mustwatch"]
         }} 
     ]
     ```
@@ -106,22 +128,22 @@ def find_best_moments(transcript_data):
     ```
     """
 
-    # Generate AI response
+    # Generate AI response (assuming genai is your AI model interface)
     response = genai.GenerativeModel("gemini-1.5-pro").generate_content(prompt)
     raw_text = response.text.strip()
 
-    # Clean AI response in case it wraps the output in a code block
-    cleaned_text = re.sub(r"```json\n(.*?)\n```", r"\1", raw_text, flags=re.DOTALL).strip()
+    # Fix any potential JSON formatting issues
+    fixed_text = fix_json_formatting(raw_text)
 
     try:
-        # Attempt to parse the cleaned JSON response
-        json_data = json.loads(cleaned_text)
+        # Attempt to parse the fixed JSON response
+        json_data = json.loads(fixed_text)
 
         # Validate if the response is a list of dictionaries with required keys
         if isinstance(json_data, list) and all(
             isinstance(item, dict) and 
             "start" in item and "end" in item and 
-            "transcript" in item and "caption" in item and "hashtags" in item
+            "transcript" in item and "caption" in item
             for item in json_data
         ):
             print(f"✅ Successfully extracted viral moments: {json_data}")
@@ -132,7 +154,7 @@ def find_best_moments(transcript_data):
     
     except json.JSONDecodeError as e:
         print(f"❌ JSON Decode Error: {e}")
-        print(f"🔍 Raw AI Response:\n{cleaned_text}")
+        print(f"🔍 Raw AI Response:\n{raw_text}")
         return []
 
 
@@ -155,6 +177,100 @@ def trim_video(video_path, moments):
     video.close()
     return clips
 
+
+def format_for_youtube_reels(input_video, output_video):
+    """Convert video to vertical (1080x1920) format for YouTube Reels without stretching the video."""
+    clip = VideoFileClip(input_video)
+    original_width, original_height = clip.size
+
+    # Resize the video to fit within a square (1080x1080) while maintaining aspect ratio
+    new_width = 1080
+    new_height = int(new_width * original_height / original_width) if original_width > original_height else 1080
+
+    # Resize video to fit within the square
+    clip_resized = clip.resize(newsize=(new_width, new_height))
+
+    # Set the final video size to 1080x1920 and center the video with black bars
+    final_clip = clip_resized.on_color(size=(1080, 1920), color=(0, 0, 0), pos='center')
+
+    # Save final output
+    final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=clip.fps)
+
+
+def add_subtitles(input_video, relevant_transcript, output_video):
+    """Overlay subtitles from relevant transcript onto video with margin around the text."""
+    clip = VideoFileClip(input_video)
+    
+    # Get the FPS of the input video
+    fps = clip.fps
+    
+    subtitle_clips = []
+    start_time = 0
+    duration_per_line = clip.duration / len(relevant_transcript)
+    
+    # Adjust font size and margin to add space around subtitles
+    font_size = 50
+    subtitle_margin = 20  # Margin around subtitle text
+    
+    # Set up the height for the subtitle box (black background)
+    box_height = 100  # You can adjust this depending on how tall you want the black box to be
+    box_color = (0, 0, 0)  # Black color for the box
+    
+    # Adjust the position to move subtitles higher
+    vertical_position = clip.h - box_height - 150  # This will push the subtitles 150px higher from the bottom
+    
+    for line in relevant_transcript:
+        # Create subtitle clip with black background for better readability
+        subtitle = TextClip(line["text"], fontsize=font_size, color='white', bg_color='black', size=(clip.w - 2*subtitle_margin, None))
+        
+        # Position the subtitle clip at the new vertical position
+        subtitle = subtitle.set_position(('center', vertical_position)).set_duration(duration_per_line)
+        subtitle = subtitle.set_start(start_time)
+        start_time += duration_per_line
+        subtitle_clips.append(subtitle)
+    
+    # Create the final video with subtitles over a black bar
+    final = CompositeVideoClip([clip] + subtitle_clips)
+
+    # Add the black box background at the bottom for the subtitles
+    final = final.on_color(size=(clip.w, clip.h + box_height), color=box_color, pos=('center', 'bottom'))
+    
+    # Save final video with subtitles
+    final.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=fps)  # Use the input video's FPS
+
+
+
+
+def process_video(input_video, transcript_data, output_video):
+    temp1 = "temp_resized.mp4"
+    temp2 = "temp_subtitled.mp4"
+    
+    # Format video to vertical
+    format_for_youtube_reels(input_video, temp1)
+    
+    # Add subtitles
+    add_subtitles(temp1, transcript_data, temp2)
+    
+    # Final processed video is saved as the output video
+    final_clip = VideoFileClip(temp2)
+    final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
+
+    # Ensure closure and cleanup of temp files
+    os.remove(temp1)
+    os.remove(temp2)
+    final_clip.close()
+    print(f"✅ Final processed video saved as {output_video}")
+
+
+def get_relevant_transcript(transcript_data, start_time, end_time):
+    """Filter the transcript to get the relevant portion for the current clip."""
+    relevant_lines = []
+    for segment in transcript_data:
+        if (segment["start"] >= start_time and segment["end"] <= end_time):
+            relevant_lines.append(segment)
+    return relevant_lines
+
+
 async def main():
     video_url = "https://www.youtube.com/watch?v=R_ICzXotoQY"  # Example URL
 
@@ -167,24 +283,44 @@ async def main():
 
     # ✅ Step 1: Transcribe the Video
     transcript = transcribe_audio(video_path)
-
-    # ✅ Step 2: Ask Gemini for best timestamps
-    best_moments = find_best_moments(transcript)
-
-    if not best_moments:
-        print("❌ No viral moments found.")
+    if not transcript:
+        print("❌ Failed to transcribe video.")
+        os.remove(video_path)  # Clean up
         return
 
-    # ✅ Step 3: Cut those parts
+    # ✅ Step 2: Find the best timestamps using Gemini
+    best_moments = find_best_moments(transcript)
+    if not best_moments:
+        print("❌ No viral moments found.")
+        os.remove(video_path)  # Clean up
+        return
+
+    # ✅ Step 3: Trim the best moments into short clips
     short_clips = trim_video(video_path, best_moments)
+    os.remove(video_path)  # Remove the original video after trimming
 
-    if short_clips:
-        print(f"✅ Generated {len(short_clips)} short clips: {short_clips}")
-    else:
+    if not short_clips:
         print("❌ Failed to generate short clips.")
+        return
 
-    os.remove(video_path)
-    print("🗑️ Deleted temp video file.")
+    print(f"✅ Generated {len(short_clips)} short clips: {short_clips}")
+
+    # ✅ Step 4: Format and Enhance Each Clip
+    final_clips = []
+    for clip in short_clips:
+        start_time = best_moments[short_clips.index(clip)]["start"]
+        end_time = best_moments[short_clips.index(clip)]["end"]
+        
+        # Get the relevant transcript for the current clip
+        relevant_transcript = get_relevant_transcript(transcript, start_time, end_time)
+        
+        output_video = f"final_{clip}"
+        process_video(clip, relevant_transcript, output_video)  # Apply formatting and effects
+        final_clips.append(output_video)
+        os.remove(clip)  # Clean up temp clips
+
+    print(f"🎉 Final processed videos: {final_clips}")
+
 
 
 # Run the main function within an asyncio event loop
