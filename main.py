@@ -239,10 +239,6 @@ def add_subtitles(input_video, output_video):
     final.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=fps)
 
 
-
-
-
-
 def process_video(input_video, output_video):
     temp1 = "temp_resized.mp4"
     temp2 = "temp_subtitled.mp4"
@@ -262,6 +258,42 @@ def process_video(input_video, output_video):
     os.remove(temp2)
     final_clip.close()
     print(f"✅ Final processed video saved as {output_video}")
+
+
+def save_clip_metadata(moments, output_folder="metadata"):
+    """
+    Saves the metadata (captions, timestamps) for each generated clip in a JSON file.
+
+    Parameters:
+    - moments (list): List of extracted moments containing start, end, transcript, and caption.
+    - output_folder (str): Folder to save the metadata files.
+    """
+    os.makedirs(output_folder, exist_ok=True)  # Ensure the folder exists
+    
+    metadata_file = os.path.join(output_folder, "clips_metadata.json")
+    
+    with open(metadata_file, "w", encoding="utf-8") as file:
+        json.dump(moments, file, indent=4, ensure_ascii=False)
+    
+    print(f"📄 Clip metadata saved to {metadata_file}")
+
+
+def save_final_videos(final_clips, output_folder="videos"):
+    """
+    Moves final processed videos to the 'videos/' folder.
+    
+    Parameters:
+    - final_clips (list): List of filenames for final processed videos.
+    - output_folder (str): Folder to store the final videos.
+    """
+    os.makedirs(output_folder, exist_ok=True)  # Ensure the folder exists
+    
+    for clip in final_clips:
+        destination = os.path.join(output_folder, os.path.basename(clip))
+        os.rename(clip, destination)
+        print(f"📂 Moved {clip} to {destination}")
+    
+    print(f"✅ All final videos saved in '{output_folder}/' folder.")
 
 
 
@@ -289,6 +321,9 @@ async def main():
         os.remove(video_path)  # Clean up
         return
 
+    # ✅ Save clip metadata
+    save_clip_metadata(best_moments)
+
     # ✅ Step 3: Trim the best moments into short clips
     short_clips = trim_video(video_path, best_moments)
     os.remove(video_path)  # Remove the original video after trimming
@@ -307,9 +342,12 @@ async def main():
         final_clips.append(output_video)
         os.remove(clip)  # Clean up temp clips
 
+    save_final_videos(final_clips)
+
+    # ✅ Cleanup transcript file after everything is done
+    os.remove("transcript.txt")
+    
     print(f"🎉 Final processed videos: {final_clips}")
-
-
 
 # Run the main function within an asyncio event loop
 if __name__ == "__main__":
