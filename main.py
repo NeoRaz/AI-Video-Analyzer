@@ -8,6 +8,7 @@ import json
 from faster_whisper import WhisperModel
 import re
 import moviepy.config as mpc
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -118,6 +119,7 @@ def find_best_moments(transcript_data):
             "end": 30.00,
             "transcript": "I'm gonna give my honest humble opinion... Another celebrity has just been accused of serious acts of violence.",
             "caption": "This celebrity just exposed the truth! 👀",
+            "video_title": "celebrity_exposed",
         }} 
     ]
     ```
@@ -167,12 +169,16 @@ def trim_video(video_path, moments):
         start_time = float(moment["start"])
         end_time = float(moment["end"])
 
-        output_file = f"short_clip_{i+1}.mp4"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        video_title = moment['video_title']
+        output_file = f"{video_title}_{timestamp}.mp4"
         print(f"✂️ Cutting {output_file}: {moment['caption']} ({moment['start']} - {moment['end']})")
         
         clip = video.subclip(start_time, end_time)
         clip.write_videofile(output_file, codec="libx264", audio_codec="aac")
         clips.append(output_file)
+
+        save_clip_metadata(moment, f"{video_title}_{timestamp}.json")
 
     video.close()
     return clips
@@ -260,7 +266,7 @@ def process_video(input_video, output_video):
     print(f"✅ Final processed video saved as {output_video}")
 
 
-def save_clip_metadata(moments, output_folder="metadata"):
+def save_clip_metadata(moments, output_file, output_folder="metadata"):
     """
     Saves the metadata (captions, timestamps) for each generated clip in a JSON file.
 
@@ -270,7 +276,7 @@ def save_clip_metadata(moments, output_folder="metadata"):
     """
     os.makedirs(output_folder, exist_ok=True)  # Ensure the folder exists
     
-    metadata_file = os.path.join(output_folder, "clips_metadata.json")
+    metadata_file = os.path.join(output_folder, output_file)
     
     with open(metadata_file, "w", encoding="utf-8") as file:
         json.dump(moments, file, indent=4, ensure_ascii=False)
@@ -321,9 +327,6 @@ async def main():
         os.remove(video_path)  # Clean up
         return
 
-    # ✅ Save clip metadata
-    save_clip_metadata(best_moments)
-
     # ✅ Step 3: Trim the best moments into short clips
     short_clips = trim_video(video_path, best_moments)
     os.remove(video_path)  # Remove the original video after trimming
@@ -337,18 +340,18 @@ async def main():
     # ✅ Step 4: Format and Enhance Each Clip
     final_clips = []
     for clip in short_clips:
-        output_video = f"final_{clip}"
+        output_video = f"{clip}"
         process_video(clip, output_video)  # Apply formatting and effects
         final_clips.append(output_video)
-        os.remove(clip)  # Clean up temp clips
 
     save_final_videos(final_clips)
 
     # ✅ Cleanup transcript file after everything is done
     os.remove("transcript.txt")
-    
+
     print(f"🎉 Final processed videos: {final_clips}")
 
 # Run the main function within an asyncio event loop
 if __name__ == "__main__":
     asyncio.run(main())
+     
