@@ -3,7 +3,7 @@ import asyncio
 import os
 import yt_dlp
 from dotenv import load_dotenv
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, ColorClip
 import json
 from faster_whisper import WhisperModel
 import re
@@ -197,51 +197,53 @@ def format_for_youtube_reels(input_video, output_video):
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=clip.fps)
 
 
-def add_subtitles(input_video, relevant_transcript, output_video):
-    """Overlay subtitles from relevant transcript onto video with margin around the text."""
+def add_subtitles(input_video, output_video):
+    """Overlay subtitles from relevant transcript onto video with a margin around the text."""
     clip = VideoFileClip(input_video)
+    
+    relevant_transcript = transcribe_audio(input_video)  # Get the transcript
     
     # Get the FPS of the input video
     fps = clip.fps
     
     subtitle_clips = []
-    start_time = 0
-    duration_per_line = clip.duration / len(relevant_transcript)
     
-    # Adjust font size and margin to add space around subtitles
+    # Subtitle settings
     font_size = 50
-    subtitle_margin = 20  # Margin around subtitle text
-    
-    # Set up the height for the subtitle box (black background)
-    box_height = 100  # You can adjust this depending on how tall you want the black box to be
+    subtitle_margin = 20  # Margin around subtitles
+    box_height = 100  # Height of the black box background
     box_color = (0, 0, 0)  # Black color for the box
+    text_color = 'white'
     
-    # Adjust the position to move subtitles higher
-    vertical_position = clip.h - box_height - 150  # This will push the subtitles 150px higher from the bottom
+    # Adjust the subtitle position dynamically
+    vertical_position = clip.h - box_height - 50  # Push the subtitle higher (avoid bottom edge)
     
     for line in relevant_transcript:
-        # Create subtitle clip with black background for better readability
-        subtitle = TextClip(line["text"], fontsize=font_size, color='white', bg_color='black', size=(clip.w - 2*subtitle_margin, None))
-        
-        # Position the subtitle clip at the new vertical position
-        subtitle = subtitle.set_position(('center', vertical_position)).set_duration(duration_per_line)
-        subtitle = subtitle.set_start(start_time)
-        start_time += duration_per_line
+        start_time = line["start"]
+        end_time = line["end"]
+        duration = end_time - start_time
+
+        # Create subtitle text with background
+        subtitle = TextClip(line["text"], fontsize=font_size, color=text_color, size=(clip.w - 2*subtitle_margin, None), method="caption")
+        subtitle = subtitle.set_position(('center', vertical_position)).set_duration(duration).set_start(start_time)
+
         subtitle_clips.append(subtitle)
     
-    # Create the final video with subtitles over a black bar
-    final = CompositeVideoClip([clip] + subtitle_clips)
+    # Create a black rectangle for the subtitle background
+    black_box = ColorClip(size=(clip.w, box_height), color=box_color).set_position(('center', clip.h - box_height)).set_duration(clip.duration)
 
-    # Add the black box background at the bottom for the subtitles
-    final = final.on_color(size=(clip.w, clip.h + box_height), color=box_color, pos=('center', 'bottom'))
-    
-    # Save final video with subtitles
-    final.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=fps)  # Use the input video's FPS
+    # Composite the video with subtitles
+    final = CompositeVideoClip([clip, black_box] + subtitle_clips)
 
-
+    # Save the final video
+    final.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=fps)
 
 
-def process_video(input_video, transcript_data, output_video):
+
+
+
+
+def process_video(input_video, output_video):
     temp1 = "temp_resized.mp4"
     temp2 = "temp_subtitled.mp4"
     
@@ -249,7 +251,7 @@ def process_video(input_video, transcript_data, output_video):
     format_for_youtube_reels(input_video, temp1)
     
     # Add subtitles
-    add_subtitles(temp1, transcript_data, temp2)
+    add_subtitles(temp1, temp2)
     
     # Final processed video is saved as the output video
     final_clip = VideoFileClip(temp2)
@@ -261,14 +263,6 @@ def process_video(input_video, transcript_data, output_video):
     final_clip.close()
     print(f"✅ Final processed video saved as {output_video}")
 
-
-def get_relevant_transcript(transcript_data, start_time, end_time):
-    """Filter the transcript to get the relevant portion for the current clip."""
-    relevant_lines = []
-    for segment in transcript_data:
-        if (segment["start"] >= start_time and segment["end"] <= end_time):
-            relevant_lines.append(segment)
-    return relevant_lines
 
 
 async def main():
@@ -308,14 +302,8 @@ async def main():
     # ✅ Step 4: Format and Enhance Each Clip
     final_clips = []
     for clip in short_clips:
-        start_time = best_moments[short_clips.index(clip)]["start"]
-        end_time = best_moments[short_clips.index(clip)]["end"]
-        
-        # Get the relevant transcript for the current clip
-        relevant_transcript = get_relevant_transcript(transcript, start_time, end_time)
-        
         output_video = f"final_{clip}"
-        process_video(clip, relevant_transcript, output_video)  # Apply formatting and effects
+        process_video(clip, output_video)  # Apply formatting and effects
         final_clips.append(output_video)
         os.remove(clip)  # Clean up temp clips
 
