@@ -18,6 +18,18 @@ mpc.change_settings({"IMAGEMAGICK_BINARY": "/usr/bin/convert"})  # Update with c
 # ✅ Configure Gemini API key using the environment variable
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+def load_config(filename='config.json'):
+    try:
+        with open(filename, 'r') as config_file:
+            config = json.load(config_file)
+            return config
+    except FileNotFoundError:
+        print(f"File {filename} not found.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Failed to parse {filename}.")
+        return None
+
 # ✅ Function to transcribe video using Whisper
 def transcribe_audio(video_path):
     print(f"📝 Transcribing {video_path} using Faster Whisper (CPU)...")
@@ -102,7 +114,7 @@ def find_best_moments(transcript_data):
     You will receive a JSON transcript of a video.
 
     ### Task:
-    Extract up to 5 **viral moments** that are either **funny, shocking, or informative**.  
+    Extract 1 **viral moments** that are either **funny, shocking, or informative**.  
     Each selected moment **must be between 30 to 60 seconds long** and should be a meaningful combination of transcript entries.
 
     ### Strict Rules:
@@ -185,6 +197,16 @@ def trim_video(video_path, moments):
 
 
 def format_for_youtube_reels(input_video, output_video):
+    """Create Short Video"""
+    config = load_config()
+    video_type = config["video_type"]
+    if video_type == "1":
+        reel_format_one(input_video=input_video, output_video=output_video)
+    elif video_type == "2":
+        reel_format_two(input_video=input_video, output_video=output_video)
+
+
+def reel_format_one(input_video, output_video):
     """Convert video to vertical (1080x1920) format for YouTube Reels without stretching the video."""
     clip = VideoFileClip(input_video)
     original_width, original_height = clip.size
@@ -202,6 +224,58 @@ def format_for_youtube_reels(input_video, output_video):
     # Save final output
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=clip.fps)
 
+
+def reel_format_two(input_video, output_video):
+    """Formats the video for YouTube Reels with the top half as the main video and the bottom half as a game filler, ensuring correct aspect ratio without stretching or black bars."""
+    
+    # Load main video
+    main_clip = VideoFileClip(input_video)
+    original_width, original_height = main_clip.size
+    
+    # Resize and center-crop main video to fit exactly in the top half (1080x960)
+    main_clip_resized = main_clip.crop(x_center=original_width / 2, y_center=original_height / 2, width=min(original_width, 1080), height=min(original_height, 960))
+    main_clip_resized = main_clip_resized.resize((1080, 960))
+    
+    # Locate filler video
+    filler_folder = "video_fillers"
+    filler_videos = [f for f in os.listdir(filler_folder) if f.endswith(('.mp4', '.mov', '.avi'))]
+    
+    if not filler_videos:
+        raise FileNotFoundError("No filler video found in the 'video_fillers' directory.")
+    
+    filler_path = os.path.join(filler_folder, filler_videos[0])
+    filler_clip = VideoFileClip(filler_path)
+    
+    # Trim filler video to match main video duration
+    filler_clip = filler_clip.subclip(0, min(main_clip.duration, filler_clip.duration))
+    
+    # Resize filler only if it's narrower than 1080px (preserving height)
+    filler_width, filler_height = filler_clip.size
+    if filler_width < 1080:
+        scale_factor = 1080 / filler_width
+        filler_clip = filler_clip.resize(width=1080, height=int(filler_height * scale_factor))  # Maintain aspect ratio
+    
+    # New size after potential resize
+    filler_width, filler_height = filler_clip.size
+
+    # Crop starting from 5% above the bottom
+    y1 = max(0, filler_height - 960 - int(filler_height * 0.15))
+    y2 = y1 + 960
+
+    filler_clip_cropped = filler_clip.crop(
+        x1=0, x2=1080, 
+        y1=y1, y2=y2
+    )
+    
+    # Position the clips correctly
+    main_clip_positioned = main_clip_resized.set_position((0, 0))
+    filler_clip_positioned = filler_clip_cropped.set_position((0, 960))
+    
+    # Create final composite video of size 1080x1920
+    final_clip = CompositeVideoClip([main_clip_positioned, filler_clip_positioned], size=(1080, 1920), bg_color=(0, 0, 0))
+    
+    # Save final output
+    final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=main_clip.fps)
 
 def add_subtitles(input_video, output_video):
     """Overlay subtitles from relevant transcript onto video with a margin around the text."""
@@ -246,22 +320,34 @@ def add_subtitles(input_video, output_video):
 
 
 def process_video(input_video, output_video):
+
+    config = load_config()
+    subtitles = config["add_subtitles"]
+
     temp1 = "temp_resized.mp4"
     temp2 = "temp_subtitled.mp4"
     
     # Format video to vertical
     format_for_youtube_reels(input_video, temp1)
     
-    # Add subtitles
-    add_subtitles(temp1, temp2)
-    
-    # Final processed video is saved as the output video
-    final_clip = VideoFileClip(temp2)
-    final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
+    # Final video with no subs
+    if subtitles:
+        add_subtitles(temp1, temp2)
+        final_clip = VideoFileClip(temp2)
+        final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
+
+    # Final video with subs
+    else:
+        final_clip = VideoFileClip(temp1)
+        final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
 
     # Ensure closure and cleanup of temp files
-    os.remove(temp1)
-    os.remove(temp2)
+    if temp1 and os.path.exists(temp1):
+        os.remove(temp1)
+
+    if temp2 and os.path.exists(temp2):
+        os.remove(temp2)
+
     final_clip.close()
     print(f"✅ Final processed video saved as {output_video}")
 
