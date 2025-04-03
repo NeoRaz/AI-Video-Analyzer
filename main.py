@@ -9,6 +9,7 @@ from faster_whisper import WhisperModel
 import re
 import moviepy.config as mpc
 from datetime import datetime
+from constants import FORMAT_ONE, FORMAT_TWO
 
 # Load environment variables
 load_dotenv()
@@ -200,9 +201,9 @@ def format_for_youtube_reels(input_video, output_video):
     """Create Short Video"""
     config = load_config()
     video_type = config["video_type"]
-    if video_type == "1":
+    if video_type == FORMAT_ONE:
         reel_format_one(input_video=input_video, output_video=output_video)
-    elif video_type == "2":
+    elif video_type == FORMAT_TWO:
         reel_format_two(input_video=input_video, output_video=output_video)
 
 
@@ -330,13 +331,13 @@ def process_video(input_video, output_video):
     # Format video to vertical
     format_for_youtube_reels(input_video, temp1)
     
-    # Final video with no subs
+    # Final video with subs
     if subtitles:
         add_subtitles(temp1, temp2)
         final_clip = VideoFileClip(temp2)
         final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
 
-    # Final video with subs
+    # Final video without subs
     else:
         final_clip = VideoFileClip(temp1)
         final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
