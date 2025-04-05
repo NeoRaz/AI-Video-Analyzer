@@ -3,6 +3,7 @@ import google.generativeai as genai
 import os
 import re
 from dotenv import load_dotenv
+from utils.config_loader import load_config
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +22,11 @@ def find_best_moments(transcript_data):
     - list: Extracted moments with start/end times, captions, and hashtags.
     """
     
+    config = load_config()
+    number_of_viral_moments = config["number_of_viral_moments"]
+    minimum_moment_time = config["minimum_moment_time"]
+    maximum_moment_time = config["maximum_moment_time"]
+
     # Convert transcript data to formatted JSON for AI prompt
     formatted_transcript = json.dumps(transcript_data, indent=2)
 
@@ -28,14 +34,15 @@ def find_best_moments(transcript_data):
     You will receive a JSON transcript of a video.
 
     ### Task:
-    Extract 1 **viral moments** that are either **funny, shocking, or informative**.  
-    Each selected moment **must be between 30 to 60 seconds long** and should be a meaningful combination of transcript entries.
+    Extract {number_of_viral_moments} **viral moments** that are either **funny, shocking, or informative**.  
+    Each selected moment **must be between {minimum_moment_time} to {maximum_moment_time} seconds long** and should be a meaningful combination of transcript entries.
 
     ### Strict Rules:
     - ✅ **Use only the provided timestamps** (Do NOT invent new timestamps).  
-    - ✅ **Each extracted moment must consist of multiple transcript entries** to form a coherent 30-60 second segment.
+    - ✅ **Each extracted moment must consist of multiple transcript entries** to form a coherent {minimum_moment_time}-{maximum_moment_time} second segment.
     - ✅ **Ensure logical continuity**—the moment must make sense when viewed as a clip.
     - ✅ **Include the transcript excerpt** from the selected segment for reference.
+    - ✅ **Ensure all video titles generated are unique.
     - ✅ **Return only valid JSON**, formatted like this:
 
     ```json

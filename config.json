@@ -2,6 +2,9 @@
     "video_url": "https://www.youtube.com/watch?v=R_ICzXotoQY",
     "font_path": "fonts/Anton-Regular.ttf",
     "video_type": "2",
+    "number_of_viral_moments": "1",
     "max_words_per_segment": 5,
+    "minimum_moment_time": "30",
+    "maximum_moment_time": "60",
     "add_subtitles": true
 }
