@@ -1,6 +1,6 @@
 import asyncio
 import os
-from utils import download_video, transcribe_audio, load_config, find_best_moments, trim_video, process_video, save_final_videos, cleanup_temp_files
+from utils import download_video, transcribe_audio, load_config, find_best_moments, trim_video, process_video, save_final_videos, cleanup_temp_files, generate_voice
 import moviepy.config as mpc
 
 mpc.change_settings({"IMAGEMAGICK_BINARY": "/usr/bin/convert"})  # Update with correct path
@@ -40,11 +40,17 @@ async def main():
 
     print(f"✅ Generated {len(short_clips)} short clips: {short_clips}")
 
-    # ✅ Step 4: Format and Enhance Each Clip
+    # Step 4: Get the ai voice caption
+    if config["add_caption_voice"]:
+        caption_voice = generate_voice(best_moments[0]["caption"])
+    else:
+        caption_voice = None
+
+    # ✅ Step 5: Format and Enhance Each Clip
     final_clips = []
     for clip in short_clips:
         output_video = f"{clip}"
-        process_video(clip, output_video)  # Apply formatting and effects
+        process_video(clip, output_video, caption_voice)  # Apply formatting and effects
         final_clips.append(output_video)
 
     save_final_videos(final_clips)

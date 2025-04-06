@@ -1,4 +1,4 @@
-from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, ColorClip
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, ColorClip,AudioFileClip
 import os
 from utils.transcriber import transcribe_audio
 from utils.config_loader import load_config
@@ -28,17 +28,19 @@ def trim_video(video_path, moments):
     video.close()
     return clips
 
-def format_for_youtube_reels(input_video, output_video):
+def format_for_youtube_reels(input_video, output_video, video_caption):
     """Create Short Video"""
     config = load_config()
     video_type = config["video_type"]
     if video_type == FORMAT_ONE:
-        reel_format_one(input_video=input_video, output_video=output_video)
+        reel_format_one(input_video=input_video, output_video=output_video, video_caption=video_caption)
     elif video_type == FORMAT_TWO:
-        reel_format_two(input_video=input_video, output_video=output_video)
+        reel_format_two(input_video=input_video, output_video=output_video, video_caption=video_caption)
 
-def reel_format_one(input_video, output_video):
-    """Convert video to vertical (1080x1920) format for YouTube Reels without stretching the video."""
+def reel_format_one(input_video, output_video, video_caption):
+    """Convert video to vertical (1080x1920) format for YouTube Reels without stretching the video.
+       Optionally plays a short audio caption at the start along with the original audio.
+    """
     clip = VideoFileClip(input_video)
     original_width, original_height = clip.size
 
@@ -52,58 +54,84 @@ def reel_format_one(input_video, output_video):
     # Set the final video size to 1080x1920 and center the video with black bars
     final_clip = clip_resized.on_color(size=(1080, 1920), color=(0, 0, 0), pos='center')
 
+    # Handle optional caption audio
+    if video_caption is not None:
+        caption_audio = AudioFileClip(video_caption)
+
+        # Mix caption audio with the original audio at the start of the video
+        original_audio = final_clip.audio
+        mixed_audio = caption_audio.set_start(0).audio_fadeout(0.2).volumex(1.0).set_duration(caption_audio.duration).fx(lambda c: c)  # Placeholder fx to ensure processing
+
+        # Combine both audios (caption + original)
+        # We overlay them using `set_audio` with a CompositeAudioClip
+        from moviepy.audio.AudioClip import CompositeAudioClip
+
+        final_audio = CompositeAudioClip([original_audio, caption_audio.set_start(0)])
+        final_clip = final_clip.set_audio(final_audio)
+
     # Save final output
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=clip.fps)
 
-def reel_format_two(input_video, output_video):
-    """Formats the video for YouTube Reels with the top half as the main video and the bottom half as a game filler, ensuring correct aspect ratio without stretching or black bars."""
-    
+import os
+from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip, CompositeVideoClip
+
+def reel_format_two(input_video, output_video, video_caption):
+    """Formats the video for YouTube Reels with the top half as the main video and the bottom half as a game filler,
+       ensuring correct aspect ratio without stretching or black bars. Optionally overlays a short caption audio at start.
+    """
+
     # Load main video
     main_clip = VideoFileClip(input_video)
     original_width, original_height = main_clip.size
-    
+
     # Resize and center-crop main video to fit exactly in the top half (1080x960)
-    main_clip_resized = main_clip.crop(x_center=original_width / 2, y_center=original_height / 2, width=min(original_width, 1080), height=min(original_height, 960))
-    main_clip_resized = main_clip_resized.resize((1080, 960))
-    
+    main_clip_resized = main_clip.crop(
+        x_center=original_width / 2,
+        y_center=original_height / 2,
+        width=min(original_width, 1080),
+        height=min(original_height, 960)
+    ).resize((1080, 960))
+
     # Locate filler video
     filler_folder = "video_fillers"
     filler_videos = [f for f in os.listdir(filler_folder) if f.endswith(('.mp4', '.mov', '.avi'))]
-    
+
     if not filler_videos:
         raise FileNotFoundError("No filler video found in the 'video_fillers' directory.")
-    
+
     filler_path = os.path.join(filler_folder, filler_videos[0])
-    filler_clip = VideoFileClip(filler_path)
-    
-    # Trim filler video to match main video duration
-    filler_clip = filler_clip.subclip(0, min(main_clip.duration, filler_clip.duration))
-    
-    # Resize filler only if it's narrower than 1080px (preserving height)
+    filler_clip = VideoFileClip(filler_path).subclip(0, min(main_clip.duration, VideoFileClip(filler_path).duration))
+
+    # Resize filler only if it's narrower than 1080px
     filler_width, filler_height = filler_clip.size
     if filler_width < 1080:
         scale_factor = 1080 / filler_width
-        filler_clip = filler_clip.resize(width=1080, height=int(filler_height * scale_factor))  # Maintain aspect ratio
-    
-    # New size after potential resize
-    filler_width, filler_height = filler_clip.size
+        filler_clip = filler_clip.resize(width=1080, height=int(filler_height * scale_factor))
 
     # Crop starting from 5% above the bottom
+    filler_width, filler_height = filler_clip.size
     y1 = max(0, filler_height - 960 - int(filler_height * 0.15))
     y2 = y1 + 960
+    filler_clip_cropped = filler_clip.crop(x1=0, x2=1080, y1=y1, y2=y2)
 
-    filler_clip_cropped = filler_clip.crop(
-        x1=0, x2=1080, 
-        y1=y1, y2=y2
-    )
-    
-    # Position the clips correctly
+    # Position the clips
     main_clip_positioned = main_clip_resized.set_position((0, 0))
     filler_clip_positioned = filler_clip_cropped.set_position((0, 960))
-    
-    # Create final composite video of size 1080x1920
-    final_clip = CompositeVideoClip([main_clip_positioned, filler_clip_positioned], size=(1080, 1920), bg_color=(0, 0, 0))
-    
+
+    # Combine into a single vertical video
+    final_clip = CompositeVideoClip(
+        [main_clip_positioned, filler_clip_positioned],
+        size=(1080, 1920),
+        bg_color=(0, 0, 0)
+    )
+
+    # Handle optional caption audio
+    if video_caption is not None:
+        caption_audio = AudioFileClip(video_caption)
+        original_audio = final_clip.audio
+        final_audio = CompositeAudioClip([original_audio, caption_audio.set_start(0)])
+        final_clip = final_clip.set_audio(final_audio)
+
     # Save final output
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=main_clip.fps)
 
@@ -196,7 +224,7 @@ def add_subtitles(input_video, output_video):
 
 
 
-def process_video(input_video, output_video):
+def process_video(input_video, output_video, voice_caption):
 
     config = load_config()
     subtitles = config["add_subtitles"]
@@ -205,7 +233,7 @@ def process_video(input_video, output_video):
     temp2 = "temp/temp_subtitled.mp4"
     
     # Format video to vertical
-    format_for_youtube_reels(input_video, temp1)
+    format_for_youtube_reels(input_video, temp1, voice_caption)
     
     # Final video with subs
     if subtitles:
@@ -221,3 +249,4 @@ def process_video(input_video, output_video):
 
     final_clip.close()
     print(f"✅ Final processed video saved as {output_video}")
+
