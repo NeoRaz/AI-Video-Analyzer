@@ -110,77 +110,90 @@ def reel_format_two(input_video, output_video):
 
 def add_subtitles(input_video, output_video):
     """Overlay subtitles from relevant transcript onto video, centered on screen with custom font."""
+    print(f"🎬 Loading video: {input_video}")
     clip = VideoFileClip(input_video)
-    
+    print(f"✅ Video loaded. Duration: {clip.duration}s, Resolution: {clip.w}x{clip.h}, FPS: {clip.fps}")
+
+    print("🧠 Transcribing audio...")
     relevant_transcript = transcribe_audio(input_video)  # Replace with your actual transcription function
-    
+    print(f"📝 Transcription complete. Found {len(relevant_transcript)} lines.")
+
     fps = clip.fps
     subtitle_clips = []
 
     # Subtitle settings
+    print("⚙️ Loading subtitle configuration...")
     config = load_config()
     font_path = config["font_path"]
-    font_size = 60  # Adjust font size based on video resolution
-    subtitle_margin = 40  # Margin to the sides
+    font_size = 60
+    subtitle_margin = 40
     text_color = 'white'
     shadow_color = 'black'
-    shadow_offset = (2, 2)  # Offset for the shadow for better visibility
-    position = ('center', 'center')  # Place subtitles near the bottom
+    shadow_offset = (2, 2)
+    position = ('center', 'center')
+    print(f"🎨 Font loaded: {font_path}")
 
-    # Calculate pixel-based positions for shadow and subtitle
-    subtitle_height = 100  # Approximate height of the subtitle (adjust as needed)
-    vertical_position = clip.h - subtitle_height - subtitle_margin  # Set distance from bottom
+    subtitle_height = 100
+    vertical_position = clip.h - subtitle_height - subtitle_margin
 
-    # Apply the string-based position to horizontal (center) and vertical (bottom)
-    horizontal_position = position[0]  # 'center'
-    vertical_position_offset = position[1]  # 'bottom'
+    horizontal_position = position[0]
+    vertical_position_offset = position[1]
 
     if vertical_position_offset == 'bottom':
         vertical_position = clip.h - subtitle_height - subtitle_margin
     elif vertical_position_offset == 'top':
         vertical_position = subtitle_margin
     else:
-        vertical_position = clip.h // 2  # Default to the center if something else is passed
+        vertical_position = clip.h // 2
 
-    for line in relevant_transcript:
+    print("🧱 Building subtitle clips...")
+
+    for idx, line in enumerate(relevant_transcript):
         start_time = line["start"]
         end_time = line["end"]
         duration = end_time - start_time
+        text = line["text"]
+
+        print(f"🕒 Subtitle {idx+1}/{len(relevant_transcript)}: {start_time}s to {end_time}s — '{text}'")
 
         # Create subtitle text clip
         subtitle = TextClip(
-            line["text"],
+            text,
             fontsize=font_size,
             color=text_color,
             font=font_path,
             size=(clip.w - 2 * subtitle_margin, None),
             method="caption"
         )
-        
-        # Create shadow text clip with offset
+
+        # Create shadow text clip
         shadow = TextClip(
-            line["text"],
+            text,
             fontsize=font_size,
             color=shadow_color,
             font=font_path,
             size=(clip.w - 2 * subtitle_margin, None),
             method="caption"
         )
-        # Apply shadow offset (moving the shadow down by shadow_offset[1])
-        shadow = shadow.set_position((horizontal_position, vertical_position + shadow_offset[1])).set_duration(duration).set_start(start_time)
 
-        # Set main subtitle position (centered horizontally and near the bottom)
-        subtitle = subtitle.set_position((horizontal_position, vertical_position)).set_duration(duration).set_start(start_time)
+        # Apply positions and durations
+        shadow = shadow.set_position((horizontal_position, vertical_position + shadow_offset[1])) \
+                       .set_duration(duration).set_start(start_time)
 
-        # Append both shadow and subtitle to the list
+        subtitle = subtitle.set_position((horizontal_position, vertical_position)) \
+                           .set_duration(duration).set_start(start_time)
+
         subtitle_clips.append(shadow)
         subtitle_clips.append(subtitle)
 
-    # Composite the video with subtitles and shadows
+    print("🧩 Combining video and subtitles...")
     final = CompositeVideoClip([clip] + subtitle_clips)
+
+    print(f"💾 Exporting final video to {output_video}...")
     final.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=fps)
 
-    print(f"📄 Final video saved to {output_video}")
+    print(f"✅ Done! Final video saved to {output_video}")
+
 
 
 def process_video(input_video, output_video):
