@@ -1,4 +1,6 @@
-from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, concatenate_audioclips, AudioFileClip, CompositeAudioClip
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, concatenate_audioclips, concatenate_videoclips, AudioFileClip, CompositeAudioClip
+from PIL import Image, ImageFilter
+import numpy as np
 import os
 from utils.transcriber import transcribe_audio
 from utils.config_loader import load_config
@@ -198,7 +200,17 @@ def add_subtitles(input_video, output_video):
 
     print(f"✅ Done! Final video saved to {output_video}")
 
-def process_video(input_video, output_video, voice_caption):
+def apply_gaussian_blur(clip, sigma=5):
+    """Apply a Gaussian blur effect to a video clip using Pillow."""
+    def blur_frame(get_frame, t):
+        frame = get_frame(t)  # Extract the frame at time t
+        pil_frame = Image.fromarray(frame)  # Convert to PIL image
+        pil_frame = pil_frame.filter(ImageFilter.GaussianBlur(radius=sigma))  # Apply blur
+        return np.array(pil_frame)  # Convert back to numpy array for MoviePy
+
+    return clip.fl(blur_frame)  # Apply the function to each fram
+
+def process_video(input_video, output_video, voice_caption, caption):
     config = load_config()
     subtitles = config["add_subtitles"]
 
@@ -232,6 +244,31 @@ def process_video(input_video, output_video, voice_caption):
         # Combine caption voice and adjusted original audio
         final_audio = CompositeAudioClip([adjusted_original, caption_audio.set_start(0)])
         final_clip = final_clip.set_audio(final_audio)
+
+        # Blur the video during the AI speaking portion
+        blur_duration = caption_duration
+        blur_clip = final_clip.subclip(0, blur_duration)
+        blur_clip = apply_gaussian_blur(blur_clip, sigma=5)
+
+        # Get the portion after AI voice
+        after_blur_clip = final_clip.subclip(blur_duration)
+
+        # Combine blurred part and rest of the video
+        final_clip = concatenate_videoclips([blur_clip, after_blur_clip])
+
+        config = load_config()
+        font_path = config["font_path"]
+        text_color = config["subtitle_color"]
+
+        # Create a transparent subtitle text (no bg_color) and center it
+        ai_subtitle = TextClip(caption, fontsize=60, color=text_color, font=font_path, method='caption', size=(final_clip.w * 0.9, None))
+        ai_subtitle = ai_subtitle.set_position('center').set_duration(caption_duration)
+
+        # Composite subtitle on top of the blurred video only (not the full final_clip)
+        blur_clip_with_subtitle = CompositeVideoClip([blur_clip, ai_subtitle])
+
+        # Combine subtitle-blurred part with the rest of the video
+        final_clip = concatenate_videoclips([blur_clip_with_subtitle, after_blur_clip])
 
     # Export final video
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)

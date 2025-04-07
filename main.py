@@ -42,18 +42,20 @@ async def main():
 
     # ✅ Step 4: Generate AI voice for each caption (if enabled)
     caption_voices = []
+    captions = []
     if config["add_caption_voice"]:
         for moment in best_moments:
             voice = generate_voice(moment["caption"])
             caption_voices.append(voice)
+            captions.append(moment["caption"])
     else:
         caption_voices = [None] * len(short_clips)
 
     # ✅ Step 5: Format and Enhance Each Clip
     final_clips = []
-    for clip, voice in zip(short_clips, caption_voices):
+    for clip, voice, caption in zip(short_clips, caption_voices, captions):
         output_video = f"{clip}"
-        process_video(clip, output_video, voice)  # Apply formatting and effects
+        process_video(clip, output_video, voice, caption)  # Apply formatting and effects
         final_clips.append(output_video)
 
     save_final_videos(final_clips)
