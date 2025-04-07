@@ -182,12 +182,31 @@ def add_subtitles(input_video, output_video):
             method="caption"
         )
 
-        # Apply positions and durations
-        shadow = shadow.set_position((horizontal_position, vertical_position + shadow_offset[1])) \
-                       .set_duration(duration).set_start(start_time)
+        # Determine numeric center for outlines and shadows
+        text_width = clip.w - 2 * subtitle_margin
+        horizontal_center = (clip.w - text_width) // 2
+        offsets = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
 
-        subtitle = subtitle.set_position((horizontal_position, vertical_position)) \
-                           .set_duration(duration).set_start(start_time)
+        # Then in your loop:
+        for dx, dy in offsets:
+            outline = TextClip(
+                text,
+                fontsize=font_size,
+                color='black',
+                font=font_path,
+                size=(text_width, None),
+                method="caption"
+            ).set_position((horizontal_center + dx, vertical_position + dy)) \
+            .set_duration(duration).set_start(start_time)
+            subtitle_clips.append(outline)
+
+        # Shadow
+        shadow = shadow.set_position((horizontal_center + shadow_offset[0], vertical_position + shadow_offset[1])) \
+                    .set_duration(duration).set_start(start_time)
+
+        # Subtitle stays centered
+        subtitle = subtitle.set_position(('center', vertical_position)) \
+                        .set_duration(duration).set_start(start_time)
 
         subtitle_clips.append(shadow)
         subtitle_clips.append(subtitle)
