@@ -9,7 +9,7 @@ def generate_voice(text):
     text = re.sub(r'[^\w\s.,!?\'\"]', '', text)
 
     # Generate speech and save to a file
-    output_path = "output.wav"
+    output_path = "temp/output.wav"
     tts.tts_to_file(text=text, file_path=output_path)
 
     print(f"Audio saved to {output_path}")

@@ -1,4 +1,4 @@
-from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, ColorClip,AudioFileClip
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, ColorClip, AudioFileClip, CompositeAudioClip
 import os
 from utils.transcriber import transcribe_audio
 from utils.config_loader import load_config
@@ -62,18 +62,11 @@ def reel_format_one(input_video, output_video, video_caption):
         original_audio = final_clip.audio
         mixed_audio = caption_audio.set_start(0).audio_fadeout(0.2).volumex(1.0).set_duration(caption_audio.duration).fx(lambda c: c)  # Placeholder fx to ensure processing
 
-        # Combine both audios (caption + original)
-        # We overlay them using `set_audio` with a CompositeAudioClip
-        from moviepy.audio.AudioClip import CompositeAudioClip
-
         final_audio = CompositeAudioClip([original_audio, caption_audio.set_start(0)])
         final_clip = final_clip.set_audio(final_audio)
 
     # Save final output
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=clip.fps)
-
-import os
-from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip, CompositeVideoClip
 
 def reel_format_two(input_video, output_video, video_caption):
     """Formats the video for YouTube Reels with the top half as the main video and the bottom half as a game filler,
@@ -153,9 +146,9 @@ def add_subtitles(input_video, output_video):
     print("⚙️ Loading subtitle configuration...")
     config = load_config()
     font_path = config["font_path"]
+    text_color = config["subtitle_color"]
     font_size = 60
     subtitle_margin = 40
-    text_color = 'white'
     shadow_color = 'black'
     shadow_offset = (2, 2)
     position = ('center', 'center')
