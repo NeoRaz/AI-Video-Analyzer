@@ -5,6 +5,7 @@ from utils.config_loader import load_config
 from datetime import datetime
 from constants import FORMAT_ONE, FORMAT_TWO
 from utils.file_utils import save_clip_metadata
+import random
 
 def trim_video(video_path, moments):
     clips = []
@@ -81,7 +82,7 @@ def reel_format_two(input_video, output_video):
     if not filler_videos:
         raise FileNotFoundError("No filler video found in the 'video_fillers' directory.")
 
-    filler_path = os.path.join(filler_folder, filler_videos[0])
+    filler_path = os.path.join(filler_folder, random.choice(filler_videos))
     filler_clip = VideoFileClip(filler_path).subclip(0, min(main_clip.duration, VideoFileClip(filler_path).duration))
 
     # Resize filler only if it's narrower than 1080px
