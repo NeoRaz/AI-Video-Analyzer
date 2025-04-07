@@ -1,4 +1,4 @@
-from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, ColorClip, AudioFileClip, CompositeAudioClip
+from moviepy.editor import VideoFileClip, CompositeVideoClip, TextClip, concatenate_audioclips, AudioFileClip, CompositeAudioClip
 import os
 from utils.transcriber import transcribe_audio
 from utils.config_loader import load_config
@@ -28,16 +28,16 @@ def trim_video(video_path, moments):
     video.close()
     return clips
 
-def format_for_youtube_reels(input_video, output_video, video_caption):
+def format_for_youtube_reels(input_video, output_video):
     """Create Short Video"""
     config = load_config()
     video_type = config["video_type"]
     if video_type == FORMAT_ONE:
-        reel_format_one(input_video=input_video, output_video=output_video, video_caption=video_caption)
+        reel_format_one(input_video=input_video, output_video=output_video)
     elif video_type == FORMAT_TWO:
-        reel_format_two(input_video=input_video, output_video=output_video, video_caption=video_caption)
+        reel_format_two(input_video=input_video, output_video=output_video)
 
-def reel_format_one(input_video, output_video, video_caption):
+def reel_format_one(input_video, output_video):
     """Convert video to vertical (1080x1920) format for YouTube Reels without stretching the video.
        Optionally plays a short audio caption at the start along with the original audio.
     """
@@ -54,21 +54,10 @@ def reel_format_one(input_video, output_video, video_caption):
     # Set the final video size to 1080x1920 and center the video with black bars
     final_clip = clip_resized.on_color(size=(1080, 1920), color=(0, 0, 0), pos='center')
 
-    # Handle optional caption audio
-    if video_caption is not None:
-        caption_audio = AudioFileClip(video_caption)
-
-        # Mix caption audio with the original audio at the start of the video
-        original_audio = final_clip.audio
-        mixed_audio = caption_audio.set_start(0).audio_fadeout(0.2).volumex(1.0).set_duration(caption_audio.duration).fx(lambda c: c)  # Placeholder fx to ensure processing
-
-        final_audio = CompositeAudioClip([original_audio, caption_audio.set_start(0)])
-        final_clip = final_clip.set_audio(final_audio)
-
     # Save final output
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=clip.fps)
 
-def reel_format_two(input_video, output_video, video_caption):
+def reel_format_two(input_video, output_video):
     """Formats the video for YouTube Reels with the top half as the main video and the bottom half as a game filler,
        ensuring correct aspect ratio without stretching or black bars. Optionally overlays a short caption audio at start.
     """
@@ -117,13 +106,6 @@ def reel_format_two(input_video, output_video, video_caption):
         size=(1080, 1920),
         bg_color=(0, 0, 0)
     )
-
-    # Handle optional caption audio
-    if video_caption is not None:
-        caption_audio = AudioFileClip(video_caption)
-        original_audio = final_clip.audio
-        final_audio = CompositeAudioClip([original_audio, caption_audio.set_start(0)])
-        final_clip = final_clip.set_audio(final_audio)
 
     # Save final output
     final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=main_clip.fps)
@@ -215,10 +197,7 @@ def add_subtitles(input_video, output_video):
 
     print(f"✅ Done! Final video saved to {output_video}")
 
-
-
 def process_video(input_video, output_video, voice_caption):
-
     config = load_config()
     subtitles = config["add_subtitles"]
 
@@ -226,20 +205,34 @@ def process_video(input_video, output_video, voice_caption):
     temp2 = "temp/temp_subtitled.mp4"
     
     # Format video to vertical
-    format_for_youtube_reels(input_video, temp1, voice_caption)
-    
-    # Final video with subs
+    format_for_youtube_reels(input_video, temp1)
+
+    # Decide which video to load based on subtitle flag
     if subtitles:
         add_subtitles(temp1, temp2)
-        final_clip = VideoFileClip(temp2)
-        final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
-
-    # Final video without subs
+        video_path = temp2
     else:
-        final_clip = VideoFileClip(temp1)
-        final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
+        video_path = temp1
 
+    final_clip = VideoFileClip(video_path)
 
+    # Handle optional caption audio
+    if voice_caption is not None:
+        caption_audio = AudioFileClip(voice_caption)
+
+        # Mute original audio during caption if needed
+        caption_duration = caption_audio.duration
+        original_audio = final_clip.audio
+
+        muted_part = original_audio.subclip(0, caption_duration).volumex(0)
+        rest_part = original_audio.subclip(caption_duration)
+        adjusted_original = concatenate_audioclips([muted_part, rest_part])
+
+        # Combine caption voice and adjusted original audio
+        final_audio = CompositeAudioClip([adjusted_original, caption_audio.set_start(0)])
+        final_clip = final_clip.set_audio(final_audio)
+
+    # Export final video
+    final_clip.write_videofile(output_video, codec='libx264', audio_codec='aac', fps=30)
     final_clip.close()
     print(f"✅ Final processed video saved as {output_video}")
-
