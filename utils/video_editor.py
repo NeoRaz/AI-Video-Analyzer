@@ -132,17 +132,18 @@ def add_subtitles(input_video, output_video):
     config = load_config()
     font_path = config["font_path"]
     text_color = config["subtitle_color"]
-    font_size = 60
+    font_size = 70
     subtitle_margin = 40
     shadow_color = 'black'
     shadow_offset = (2, 2)
+    outline_color = "black"
+    outline_width = 2
     position = ('center', 'center')
     print(f"🎨 Font loaded: {font_path}")
 
     subtitle_height = 100
     vertical_position = clip.h - subtitle_height - subtitle_margin
 
-    horizontal_position = position[0]
     vertical_position_offset = position[1]
 
     if vertical_position_offset == 'bottom':
@@ -169,7 +170,9 @@ def add_subtitles(input_video, output_video):
             color=text_color,
             font=font_path,
             size=(clip.w - 2 * subtitle_margin, None),
-            method="caption"
+            method="caption",
+            stroke_width=outline_width, 
+            stroke_color=outline_color
         )
 
         # Create shadow text clip
@@ -185,20 +188,6 @@ def add_subtitles(input_video, output_video):
         # Determine numeric center for outlines and shadows
         text_width = clip.w - 2 * subtitle_margin
         horizontal_center = (clip.w - text_width) // 2
-        offsets = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
-
-        # Then in your loop:
-        for dx, dy in offsets:
-            outline = TextClip(
-                text,
-                fontsize=font_size,
-                color='black',
-                font=font_path,
-                size=(text_width, None),
-                method="caption"
-            ).set_position((horizontal_center + dx, vertical_position + dy)) \
-            .set_duration(duration).set_start(start_time)
-            subtitle_clips.append(outline)
 
         # Shadow
         shadow = shadow.set_position((horizontal_center + shadow_offset[0], vertical_position + shadow_offset[1])) \
@@ -278,10 +267,12 @@ def process_video(input_video, output_video, voice_caption, caption):
         config = load_config()
         font_path = config["font_path"]
         text_color = config["subtitle_color"]
+        outline_color = "black"
+        outline_width = 2
 
-        # Create a transparent subtitle text (no bg_color) and center it
-        ai_subtitle = TextClip(caption, fontsize=60, color=text_color, font=font_path, method='caption', size=(final_clip.w * 0.9, None))
-        ai_subtitle = ai_subtitle.set_position('center').set_duration(caption_duration)
+        # Create a transparent subtitle text (no bg_color) and center it, with outline
+        ai_subtitle = TextClip(caption, fontsize=80, color=text_color, font=font_path, method='caption', size=(final_clip.w * 0.9, None), stroke_width=outline_width, stroke_color=outline_color)
+        ai_subtitle = ai_subtitle.set_position(('center', 'center')).set_duration(caption_duration)
 
         # Composite subtitle on top of the blurred video only (not the full final_clip)
         blur_clip_with_subtitle = CompositeVideoClip([blur_clip, ai_subtitle])
