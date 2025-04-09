@@ -45,11 +45,12 @@ async def main():
     captions = []
     if config["add_caption_voice"]:
         for moment in best_moments:
-            voice = generate_voice(moment["caption"])
+            voice = generate_voice(moment["caption"], moment["video_title"])
             caption_voices.append(voice)
             captions.append(moment["caption"])
     else:
         caption_voices = [None] * len(short_clips)
+        captions = [moment["caption"] for moment in best_moments]
 
     # ✅ Step 5: Format and Enhance Each Clip
     final_clips = []

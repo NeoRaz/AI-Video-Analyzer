@@ -1,11 +1,11 @@
 {
-    "video_url": "https://www.youtube.com/watch?v=R_ICzXotoQY",
+    "video_url": "https://www.youtube.com/watch?v=zHt1IEgEISo",
     "font_path": "fonts/Anton-Regular.ttf",
-    "video_type": "2",
-    "number_of_viral_moments": "1",
+    "video_type": "1",
+    "number_of_viral_moments": 10,
     "max_words_per_segment": 5,
-    "minimum_moment_time": "30",
-    "maximum_moment_time": "60",
+    "minimum_moment_time": "60",
+    "maximum_moment_time": "180",
     "add_subtitles": true,
     "add_caption_voice": true,
     "subtitle_color": "white"

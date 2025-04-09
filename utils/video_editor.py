@@ -13,7 +13,7 @@ def trim_video(video_path, moments):
     clips = []
     video = VideoFileClip(video_path)
 
-    for i, moment in enumerate(moments[:5]):  # ✅ Max 5 clips
+    for i, moment in enumerate(moments):
         start_time = float(moment["start"])
         end_time = float(moment["end"])
 
