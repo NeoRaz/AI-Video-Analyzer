@@ -69,13 +69,23 @@ def reel_format_two(input_video, output_video):
     main_clip = VideoFileClip(input_video)
     original_width, original_height = main_clip.size
 
-    # Resize and center-crop main video to fit exactly in the top half (1080x960)
-    main_clip_resized = main_clip.crop(
-        x_center=original_width / 2,
-        y_center=original_height / 2,
-        width=min(original_width, 1080),
-        height=min(original_height, 960)
-    ).resize((1080, 960))
+    # Resize main video so height is 960 (top half), then center-crop width to 1080
+    aspect_ratio = original_width / original_height
+    resized_width = int(aspect_ratio * 960)
+
+    main_clip_resized = main_clip.resize(height=960)
+
+    # If resized width is wider than 1080, crop center to 1080
+    if resized_width > 1080:
+        main_clip_resized = main_clip_resized.crop(
+            x_center=resized_width / 2,
+            y_center=480,
+            width=1080,
+            height=960
+        )
+    else:
+        # If it's narrower, add black bars (not recommended, but fallback)
+        main_clip_resized = main_clip_resized.resize(width=1080)
 
     # Locate filler video
     filler_folder = "video_fillers"
