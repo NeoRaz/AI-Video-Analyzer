@@ -2,9 +2,11 @@
 
 An automated pipeline that takes a YouTube video, identifies funny moments using AI, cuts and edits those clips, adds subtitles, and exports short-form content for platforms like TikTok and Instagram Reels.
 
-## ⚠️ Disclaimer
+## ⚠️ Disclaimer:
 
-This project is for educational and experimental purposes only. Respect copyright laws when downloading and using third-party videos.
+This project is intended for educational and personal use only. Do not use it to download or republish copyrighted material without permission.
+The author is not responsible for any misuse of this tool. Always comply with platform terms and local laws.
+
 
 ## ✨ Features
 
@@ -34,6 +36,10 @@ This project is for educational and experimental purposes only. Respect copyrigh
 ## 📂 Example Output
 
 > Coming soon – will upload demo videos and screenshots.
+
+### 🔐 API Keys
+
+Create a `.env` file in the root directory with your credentials:
 
 ## 📦 Installation
 
