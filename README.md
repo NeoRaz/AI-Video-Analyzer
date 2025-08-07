@@ -28,8 +28,7 @@ The author is not responsible for any misuse of this tool. Always comply with pl
 ## 🛠️ Tech Stack
 
 - **Python** – core scripting and orchestration
-- **OpenAI GPT-4** – for humor/context analysis
-- **Whisper API** – for speech-to-text transcription
+- **AI** – for humor/context analysis
 - **MoviePy & FFmpeg** – for cutting, editing, and formatting video
 - **yt-dlp** – to download YouTube videos
 
