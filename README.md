@@ -2,6 +2,8 @@
 
 An automated pipeline that takes a YouTube video, identifies funny moments using AI, cuts and edits those clips, adds subtitles, and exports short-form content for platforms like TikTok and Instagram Reels.
 
+## ⚠️ Disclaimer: This project is for educational and experimental purposes only. Respect copyright laws when downloading and using third-party videos.
+
 ## ✨ Features
 
 - 🧠 **AI-Powered Humor Detection**: Uses OpenAI to analyze video transcripts and detect funny moments.
@@ -31,13 +33,13 @@ An automated pipeline that takes a YouTube video, identifies funny moments using
 
 > Coming soon – will upload demo videos and screenshots.
 
-## 📦 Installation (coming soon)
+## 📦 Installation
 
 To run the project locally, you'll need:
 
 - Python 3.9+
 - FFmpeg installed and available in PATH
-- OpenAI API key
+- AI API key
 
 ```bash
 git clone https://github.com/nimarazavi/funny-moment-extractor.git
