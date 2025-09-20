@@ -49,6 +49,6 @@ To run the project locally, you'll need:
 - AI API key
 
 ```bash
-git clone https://github.com/nimarazavi/funny-moment-extractor.git
-cd funny-moment-extractor
+git clone https://github.com/NeoRaz/AI-Video-Analyzer.git
+cd AI-Video-Analyzer
 pip install -r requirements.txt
